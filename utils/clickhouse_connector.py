@@ -54,13 +54,12 @@ class ClickHouseConnector:
     @classmethod
     def initialize(cls, op):
         cls.source_ck_ip = op.source_cluster_ip
-        cls.source_ck_port = op.source_ck_port
-        cls.target_ck_ip = op.target_ck_ip
-        cls.target_ck_port = op.target_ck_port
+        cls.source_ck_port = op.source_cluster_port
+        cls.target_ck_ip = op.target_cluster_ip
+        cls.target_ck_port = op.target_cluster_port
         cls.get_source_connection()
         cls.get_databases()
         cls.get_target_connection()
-        cls.get_tables_and_split()
 
     @classmethod
     def get_source_connection(cls):
@@ -142,10 +141,10 @@ class ClickHouseConnector:
                     mc_logger.error("Exception when executing create table %s" %(Exception.message))
             # Create distributed tables
             mc_logger.info("Will Create distributed Tables in %s" %(database))
-            cls.do_create_distributed_tables(database)
+            cls.create_distributed_tables(database)
             
     @classmethod
-    def do_create_distributed_tables(cls, database):
+    def create_distributed_tables(cls, database):
         mc_logger.info("distributed tables %s in %s" %(str(cls.no_local_table_list), database))
         for distributed_table in cls.no_local_table_list:
           # Fetch the table schema

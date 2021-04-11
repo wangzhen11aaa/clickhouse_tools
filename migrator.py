@@ -15,10 +15,10 @@ if __name__ == "__main__":
 
     # Initialize the ClickHouseConnector
     ClickHouseConnector.initialize(op)
-    ClickHouseConnector.do_create_databases()
-    ClickHouseConnector.do_create_local_tables()
-    ClickHouseConnector.do_create_distributed_tables()
+    ClickHouseConnector.get_databases()
     
+    ClickHouseConnector.do_create_databases()
+    ClickHouseConnector.do_create_tables()
         # First create database on target cluster
      #print "len(args) " + str(len(args))
     #print "args" + "".join(args) 
