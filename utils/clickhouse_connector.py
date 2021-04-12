@@ -57,6 +57,7 @@ class ClickHouseConnector:
         cls.source_ck_port = op.source_cluster_port
         cls.target_ck_ip = op.target_cluster_ip
         cls.target_ck_port = op.target_cluster_port
+        cls.zk_path_suffix_to_append = op.zk_path_suffix
         cls.get_source_connection()
         cls.get_databases()
         cls.get_target_connection()

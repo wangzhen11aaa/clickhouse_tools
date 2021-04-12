@@ -15,4 +15,5 @@ def parse_option():
     
     parser.add_option("--target-cluster-ip", dest="target_cluster_ip", type = 'string', default = '', help = 'clickhouse target cluster ip, default localhost')
     parser.add_option("--target-cluster-port", dest="target_cluster_port", type = 'int', default=9000, help='clickhouse target cluster port, default 9000')
+    parser.add_option("--zk-path-suffix", dest="zk_path_suffix", type='string', default='', help='new root path name of replicated engine table, e.g -new or -bi-new or -cloudatas-new')
     return parser.parse_args()

@@ -10,9 +10,11 @@ if __name__ == "__main__":
     (op, args) = option_parser.parse_option()
 
     if not op.source_cluster_ip or not op.target_cluster_ip:
-        mc_logger.error("source or target cluster ip can not be empty!") 
+        mc_logger.error("source or target cluster ip can not be empty! \n use --help for prompt") 
         exit(-1) 
-
+    if not op.zk_path_suffix: 
+        mc_logger.error("New root path for replicatedMerge Engine must not be emtpy! \n use --help for prompt")
+        exit(-1)
     # Initialize the ClickHouseConnector
     ClickHouseConnector.initialize(op)
     ClickHouseConnector.get_databases()

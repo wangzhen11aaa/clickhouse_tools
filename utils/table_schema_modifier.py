@@ -32,7 +32,7 @@ class TableSchemaModifier:
     MergeTreePattern = "(?<=MergeTree\('/).*?(?=/)"
     # This method will modify these schema.
     @classmethod
-    def modify(cls, table_schema, database, table):
+    def modify(cls, table_schema, database, table, zk_path_suffix_to_append):
         mc_logger.info("table_schema :%s " % (table_schema))
         mc_logger.info("database : %s" % (database))
         mc_logger.info("table : %s"  %(table))
@@ -54,7 +54,7 @@ class TableSchemaModifier:
                 except AssertionError:
                     mc_logger.error("Bad Matching " + " ".join(findall_ret))
                 mc_logger.info("Good Matching  " + (findall_ret[0] ))
-                table_schema = table_schema.replace(findall_ret[0], findall_ret[0] + "-new")
+                table_schema = table_schema.replace(findall_ret[0], findall_ret[0] + zk_path_suffix_to_append)
         mc_logger.info("Target target_schema %s" %(table_schema))
         return table_schema
 
