@@ -13,66 +13,75 @@ from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, FIRST_CO
 
 from clickhouse_driver import Client
 
+#myFormat='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
 
-logging.basicConfig(filename="migrate.log", filemode="w", level=logging.INFO)
+#logging.basicConfig(filename="migrate.log", filemode="w", level=logging.INFO)
+logging.basicConfig(
+    filename='migrate.log',
+    level=logging.DEBUG,
+    format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filemode='w'
+)
 
 class RemoteIPConnectionCounter(object):
     lock = threading.Lock()
-    ipCountDict = dict()
+    targetIPCountDict = dict()
+    sourceIPCountDict = dict()
+
+
+    @classmethod
+    def _doInit(cls, ipString, ipCountDict):
+        ipList = ipString.rstrip(',').split(",")
+        for _ip in ipList:
+            ipCountDict.setdefault(_ip, 0)
+        printAndLog(100*'-')
+        printAndLog(repr(ipCountDict))
+        printAndLog(100*'-')
 
     # 通过已有ip地址初始化Dict
     # ipString:ip1,ip2,ip3,...
     @classmethod
-    def initIPCountDict(cls, ipString):
-        ipList = ipString.rstrip(',').split(",")
-        for _ip in ipList:
-            cls.ipCountDict.setdefault(_ip, 0)
-        print(100*'-')
-        print(repr(cls.ipCountDict))
-        print(100*'-')
+    def initIPCountDict(cls, targetIPString, sourceIPString="10.9.7.11,10.9.7.12,10.9.7.13,10.9.7.14,10.9.7.15,10.9.7.16"):
+        printAndLog("Init sourceIPCountDict")
+        cls._doInit(sourceIPString, cls.sourceIPCountDict)
+        printAndLog("Init targetIPCountDict")
+        cls._doInit(targetIPString, cls.targetIPCountDict)
 
-    # 获取当前最少的连接的机器
+    # 获取当前最少的目标连接的机器
     @classmethod
-    def getLeastIPConnectionIPAndIncreaseCount(cls):
+    def getLeastIPConnectionIPAndIncreaseCount(cls, iPCountDict, variableName="Source"):
         cls.lock.acquire()
         #sorted Dict return list of tuple()
-        print(100*'-')
-        print("Current ipCountDict before getLeastIpConnection : %s " %(repr(cls.ipCountDict)))
-        logging.info("Current ipCountDict before getLeastIpConnection : %s " %(repr(cls.ipCountDict)))
-        tmpSortedList = sorted(cls.ipCountDict.items(), key=lambda item:item[1])
-        print("Sorted ip List: " + repr(tmpSortedList))
-        logging.info("Sorted ip List: " + repr(tmpSortedList))
+        printAndLog(100*'-')
+        printAndLog("Current %s IPCountDict before getLeastIpConnection : %s " %(variableName, repr(cls.targetIPCountDict)))
+        tmpSortedList = sorted(iPCountDict.items(), key=lambda item:item[1])
+        printAndLog("Sorted ip List: " + repr(tmpSortedList))
         ipLeastConnection = tmpSortedList[0][0]
         # 计数
-        cls.ipCountDict[ipLeastConnection]+=1
-        print("Current ipCountDict after getLeastIpConnection : %s " %(repr(cls.ipCountDict)))
-        logging.info("Current ipCountDict after getLeastIpConnection : %s " %(repr(cls.ipCountDict)))
-        print(100*'-')
-        logging.info(100*'-')
+        iPCountDict[ipLeastConnection]+=1
+        printAndLog("Current %s IPCountDict after getLeastIpConnection : %s " %(variableName, repr(cls.targetIPCountDict)))
+        printAndLog(100*'-')
         cls.lock.release()
         return ipLeastConnection
     #当ip使用结束后，对相应的引用减一
     @classmethod
-    def releaseIPConnectionAndDecreaseCount(cls, IPReleased):
+    def releaseIPConnectionAndDecreaseCount(cls, IPReleased, iPCountDict, variableName="Source"):
         cls.lock.acquire()
-        print(100*'-')
-        logging.info("release %s \n" %(IPReleased))
-        logging.info(100*'-')
-        print("Current ipCountDict before releasing : %s \n" %(repr(cls.ipCountDict)))
-        logging.info("Current ipCountDict before releasing : %s \n" %(repr(cls.ipCountDict)))
-        if sum(cls.ipCountDict.values()) == 6:
-            cls.clearDict()
-        #cls.ipCountDict[IPReleased]-=1
-        print("Current ipCountDict after releasing : %s \n" %(repr(cls.ipCountDict)))
-        logging.info("Current ipCountDict after releasing : %s \n" %(repr(cls.ipCountDict)))
-        print(100*'-')
-        logging.info(100*'-')
+        printAndLog(100*'-')
+        printAndLog("release %s \n in %s " %(IPReleased, variableName))
+        printAndLog("Current %siPCountDict before releasing : %s \n" %(variableName, repr(cls.targetIPCountDict)))
+        #if sum(cls.targetIPCountDict.values()) == 6:
+        #    cls.clearDict()
+        iPCountDict[IPReleased]-=1
+        printAndLog("Current %sIPCountDict after releasing : %s \n" %(variableName, repr(cls.targetIPCountDict)))
+        printAndLog(100*'-')
         cls.lock.release()
 
     @classmethod
     def clearDict(cls):
-        for key in cls.ipCountDict.keys():
-            cls.ipCountDict[key] = 0
+        for key in cls.targetIPCountDict.keys():
+            cls.targetIPCountDict[key] = 0
 
 def format_partition_expr(p):
     if isinstance(p, int):
@@ -84,30 +93,33 @@ def execute_queries(conn_list, queries):
     if isinstance(queries, str):
         queries = queries.split(';')
     for q in queries:
-        logging.info("execute query : " + q)
+        printAndLog("execute query : " + q)
         random.choice(conn_list).execute(q.strip(), settings=settings)
 
 def new_execute_queries(queries):
     if isinstance(queries, str):
         queries = queries.split(';')
     for q in queries:
-        logging.info("execute query : " + q)
-        print(100*'-')
-        logging.info(100*'-')
-        ipLeastIpConnection = RemoteIPConnectionCounter.getLeastIPConnectionIPAndIncreaseCount()
-        print("get ip: %s : " %(ipLeastIpConnection))
-        logging.info("get ip: %s : " %(ipLeastIpConnection))
-        print(100*'-')
-        logging.info(100*'-')
-        target_conn =  Client(host=ipLeastIpConnection, user='default', password='')
+        sourceIPLeastConnection = RemoteIPConnectionCounter.getLeastIPConnectionIPAndIncreaseCount(RemoteIPConnectionCounter.sourceIPCountDict, "source")
+        printAndLog("sourceIPLeastIPConnection %s " %(sourceIPLeastConnection))
+        printAndLog("execute query before format : " + q)
+        #printAndLog(q %s(sourceIPLeastConnection))
+        query = q.replace("SOURCE_IP", sourceIPLeastConnection)
+        printAndLog("execute query : " + query)
+        printAndLog(100*'-')
+        targetIPLeastConnection = RemoteIPConnectionCounter.getLeastIPConnectionIPAndIncreaseCount(RemoteIPConnectionCounter.targetIPCountDict, "target")
+        printAndLog("get ip: %s : " %(targetIPLeastConnection))
+        printAndLog(100*'-')
+        target_conn = Client(host=targetIPLeastConnection, user='default', password='')
         try:
-            target_conn.execute(q.strip(), settings=settings)
+            target_conn.execute(query.strip(), settings=settings)
         except Exception as ex:
-            logging.info(ex)
-        RemoteIPConnectionCounter.releaseIPConnectionAndDecreaseCount(ipLeastIpConnection)
+            printAndLog(ex)
+        RemoteIPConnectionCounter.releaseIPConnectionAndDecreaseCount(targetIPLeastConnection,RemoteIPConnectionCounter.targetIPCountDict, "target")
+        RemoteIPConnectionCounter.releaseIPConnectionAndDecreaseCount(sourceIPLeastConnection, RemoteIPConnectionCounter.sourceIPCountDict, "source")
 
 def execute_query(conn, query):
-    logging.info("execute query : " + query)
+    printAndLog("execute query : " + query)
     conn.execute(query.strip(), settings=settings)
 
 class Table(object):
@@ -167,18 +179,18 @@ class Table(object):
         self._target_conn.execute(self.ddl)
 
     def copy_data_from_remote(self, idx, total_tables, by_partition=True):
-        logging.info('>>>> start to migrate table %s, progress %s/%s', self.identity, idx+1, total_tables)
+        printAndLog('>>>> start to migrate table %s, progress %s/%s' %(self.identity, idx+1, total_tables))
         self.create()
         if self.is_view:
-            logging.info('ignore view %s', self.identity)
+            printAndLog("ignore view %s" %(self.identity))
             return
 
         is_identical, bug_partitions = self.check_consistency()
         if is_identical:
-            logging.info('table %s has the same number of rows, skip', self.identity)
+            printAndLog("table %s has the same number of rows, skip" %(self.identity))
             return
 
-        logging.info("starting _copy_table_from_remote()")
+        printAndLog("starting _copy_table_from_remote()")
         self._copy_table_from_remote()
 
     # detach all the data via truncate
@@ -189,7 +201,7 @@ class Table(object):
             query = f'''
                 TRUNCATE TABLE {_local_table.identity} ON CLUSTER replicated_stock;
             '''
-            print(query)
+            printAndLog(query)
             execute_query(cls.cls_target_conn, query)
 
     # detach all the data via truncate
@@ -200,18 +212,22 @@ class Table(object):
             query = f'''
                 DROP TABLE {_local_table.identity} ON CLUSTER replicated_stock;
             '''
-            print(query)
+            printAndLog(query)
             try:
                 execute_query(cls.cls_target_conn, query)
             except Exception as ex:
-                print(ex)
+                printAndLog(ex)
 
     def _copy_table_from_remote(self):
+        # queries = f'''
+        # INSERT INTO {self.identity}
+        # SELECT * FROM remote('{self._source_conn.connection.hosts[0][0]}:{self._source_conn.connection.hosts[0][1]}', {self.identity}, '{self._source_conn.connection.user}', '{self._source_conn.connection.password}')
+        # '''
+        #替换成源ip负载均衡
         queries = f'''
         INSERT INTO {self.identity}
-        SELECT * FROM remote('{self._source_conn.connection.hosts[0][0]}:{self._source_conn.connection.hosts[0][1]}', {self.identity}, '{self._source_conn.connection.user}', '{self._source_conn.connection.password}')
+        SELECT * FROM remote('SOURCE_IP:{self._source_conn.connection.hosts[0][1]}', {self.identity}, '{self._source_conn.connection.user}', '{self._source_conn.connection.password}')
         '''
-        print(queries)
         #execute_queries(self._target_conn_list, queries)
         new_execute_queries(queries)
 
@@ -249,7 +265,7 @@ def get_all_tables(_database):
     '''
     source_conn = Client(host="10.9.7.11", user='default', password='')
     #source_conn.settings['insert_block_size']=1048576*1024
-    #print(dir(source_conn.settings))
+    #printAndLog(dir(source_conn.settings))
     #return
     rows = source_conn.execute(q, settings=settings)
     if(_database):
@@ -263,32 +279,26 @@ def copy_remote_tables(tables):
     # 这里我们使用python的ThreadPool多线程模型
 
     start_time = datetime.datetime.now()
-    #_executor = ThreadPoolExecutor(max_workers=20)
-    #tasks = [_executor.submit((t.copy_data_from_remote, (idx, len(tables))) for idx, t in enumerate(tables))]
-    #for idx, t in enumerate(tables):
-    #wait(tasks, return_when=ALL_COMPLETED)
-    #     logging.info('>>>> start to migrate table %s, progress %s/%s', t.identity, idx+1, len(tables))
-    #     t.copy_data_from_remote()
-    logging.info('<<<< migrated table in %s', datetime.datetime.now() - start_time)
+    printAndLog('<<<< migrated table in %s', datetime.datetime.now() - start_time)
 
 
 # 参数times用来模拟网络请求的时间
 def get_html(times):
     now = datetime.datetime.now()
-    print(now.strftime("%H:%M:%S"))
+    printAndLog(now.strftime("%H:%M:%S"))
     time.sleep(times)
-    print("get page {}s finished".format(times))
+    printAndLog("get page {}s finished".format(times))
     return time
 
 def with_retry(max_attempts=5, backoff=120):
     def decorator(f):
         @functools.wraps(f)
         def inner(*args, **kwargs):
-            print("hello with_retry")
+            printAndLog("hello with_retry")
             attempts = 0
             while True:
                 attempts += 1
-                logging.info('start attempt #%s', attempts)
+                printAndLog("start attempt # %s" %(attempts))
                 try:
                     f(*args, **kwargs)
                 except Exception as e:
@@ -302,32 +312,45 @@ def with_retry(max_attempts=5, backoff=120):
 
 
 @with_retry()
-def main(_databaseList):
+def main(_databaseList, _concurrentWorks):
     #print (f"{self._source_conn.connection.hosts[0][0]}:{self._source_conn.connection.hosts[0][1]}")
-    print("default concurrency is 6")
+    printAndLog("default concurrency is %s" %(_concurrentWorks))
     for _database in _databaseList:
         tables = get_all_tables(_database)
-        logging.info('got %d tables: %s', len(tables), tables)
+        printAndLog('got %d tables: %s' %(len(tables), tables))
         local_tables = list(filter(lambda table: "_local" in table.identity, tables))
-        logging.info("local_tables number: %d " %(len(local_tables)))
+        printAndLog("local_tables number: %d " %(len(local_tables)))
         Table.truncate_remote_table_data(local_tables)
         #Table.drop_remote_table_data(local_tables)
         global_tables = list(filter(lambda table: "_local" not in table.identity, tables))
-        logging.info("global_tables number: %d " %(len(global_tables)))
+        printAndLog("global_tables number: %d " %(len(global_tables)))
         #copy_remote_tables(tables)
-        _executor = ThreadPoolExecutor(max_workers=6)
+        _executor = ThreadPoolExecutor(max_workers=_concurrentWorks)
         tasks = [_executor.submit(t.copy_data_from_remote, idx, len(global_tables)) for idx, t in enumerate(global_tables)]
         # # for idx, t in enumerate(tables):
         wait(tasks, return_when=ALL_COMPLETED)
-        logging.info("execute after wait")
+        printAndLog("execute after wait")
+
+def printAndLog(message):
+    print(message)
+    logging.info(message)
 
 if __name__ == '__main__':
-    print("Input database list, and target machien ips string, seperated by ','")
+    printAndLog("Input database list, and target machien ips string, seperated by ',', concurrentWorks")
     databaseString = sys.argv[1]
     remoteIpString = sys.argv[2]
+    concurrentWorks = 6
+    try:
+        concurrentWorks = sys.argv[3]
+        printAndLog("Reset concurrentWorks : %s " %(concurrentWorks))
+    except Exception as ex:
+        printAndLog("Use default concurrent :6")
+        printAndLog (ex)
+    #sourceIPString目前使用的是实时集群ip，已经写入函数声明默认值
     RemoteIPConnectionCounter.initIPCountDict(remoteIpString)
     databaseList = databaseString.rstrip(',').split(',')
     if (databaseList == None):
-        print ("No database input, will sync all database")
-    main(databaseList)
-    print("main")
+        printAndLog("No database input")
+        exit(-1)
+    main(databaseList, concurrentWorks)
+    printAndLog("main")
