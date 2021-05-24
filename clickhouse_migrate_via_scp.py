@@ -7,16 +7,6 @@ logging.basicConfig(filename="migrate_via_scp.log", filemode="w", level=logging.
 
 dataPath = "/data/d1/clickhouse/data"
 migrateFromPath = "/data/d1/migrate_from"
-
-
-# 定义语法糖用于标准输出日志,因为需要对类变量及方法进行判断，然后分别去打印。并不会省事，所以不使用此方法。
-
-# def myLogger(fn):
-#     def wrapper(*args, **kargs):
-#        print("fn's name %s : " % (fn.__name__)) 
-#        logging.info("fn's name %s : " % (fn.__name__)) 
-       
-
 # TODO这些方法可以使用语法糖，来解决日志打印的通用问题
 """
 因为我们的数据目录都是在 /data/d1/clickhouse/data下，所以我们可以得到这些库.
@@ -65,7 +55,6 @@ class TableSelector(object):
 class PartitionSelector(object):
     pass
 
-
 class InitEnv(object):
     cleanLocalEnvCMD = "sudo su - root -c 'rm -rf /data/d1/migrate_from'"
     createLocalEnvCMD = "sudo su - root -c 'mkdir -p  /data/d1/migrate_from && chown -R op_admin:op_admin /data/d1/migrate_from'"
@@ -73,7 +62,7 @@ class InitEnv(object):
     # %s 是ip的 占位符
     cleanRemoteEnvCMD = "ssh -p 50022 op_admin@%s sudo su - root -c \\'rm -rf /data/d1/migrate_in\\'"
     createRemoteEnvCMD = "ssh -p 50022 op_admin@%s sudo su - root -c \\'mkdir -p /data/d1/migrate_in\\'"
-    #remoteChownCMD = "ssh -p 50022 op_admin@%s sudo su - root -c \\'chown -R op_admin:op_admin /data/d1/migrate_in\\'"
+    remoteChownCMD = "ssh -p 50022 op_admin@%s sudo su - root -c \\'chown -R op_admin:op_admin /data/d1/migrate_in\\'"
 
     @classmethod
     def initLocalEnv(cls):
@@ -99,19 +88,55 @@ class InitEnv(object):
         logging.info("remoteChownCMD stdout %s : " %(cls.remoteChownCMD %(ip)) + out.decode('utf-8') + " stderr: " + err.decode('utf-8'))
 
 
+"""
+我们使用shell命令对目标数据目录进行压缩
+"""
+class Compressor(object):
+    # 跳转到目录,为了控制压缩路径为./,压缩然后mv
+    compressAndMoveCMD = "cd %s && touch %s.tar.gz && tar --exclude=%s.tar.gz --exclude=format_version.txt -czvf %s.tar.gz . && mv -f %s.tar.gz /data/d1/migrate_from"
 
-# """
-# 我们需要对tar数据压缩包进行传输
-# """
+    #传入数据路径，进行压缩
+    @classmethod
+    def compress(cls, database, table):
+        _tablePath = dataPath+'/'+database+'/'+table
+        out, err = compressAndMoveCMDResult = subprocess.Popen(cls.compressAndMoveCMD %(_tablePath, table, table, table, table),shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        print("compressAndMoveCMD stdout %s : " %(cls.compressAndMoveCMD %(_tablePath, table, table, table, table)) + out.decode('utf-8') + " stderr: " + err.decode('utf-8'))
+        logging.info("compressAndMoveCMD stdout %s : " %(cls.compressAndMoveCMD %(_tablePath, table, table, table, table)) + out.decode('utf-8') + " stderr: " + err.decode('utf-8'))
 
-# class Transfer(object):
-#     # 根据本地的tarFilePath发送到目标远程机器
-#     transferCMD="scp -P 50022 %s op_admin@%s:%s"
-#     @classmethod
-#     def transferTar(cls, tarFilePath, ip, targetDataPath="/data/d1/migrate_in"):
-#         transferCMDResult = subprocess.Popen(cls.transferCMD %(tarFilePath, ip, targetDataPath), \
-#             shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
-#         logging.info("transferCMD:%s transferCMDResult " %(cls.transferCMD %(tarFilePath, ip, targetDataPath)) + transferCMDResult.decode('utf-8'))
+
+"""
+我们对已经压缩的文件进行Md5算法求一个值,这里已经开始并行执行
+"""
+class Md5Sum(object):
+    localMD5SumCMD = "md5sum %s"
+    remoteMD5SumCMD = "scp -P 50022 op_admin@%s sudo su -root -c \\'md5sum /data/d1/migrate_in/%s\\'"
+    @classmethod
+    def localMD5Sum(cls, tarFilePath):
+        localMD5SumCMDResult = subprocess.Popen(cls.localMD5SumCMD %(tarFilePath), \
+            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
+        logging.info("localMD5SumCMD:%s localMD5SumCMDResult " %(cls.localMD5SumCMD %(tarFilePath))+ localMD5SumCMDResult.decode('utf-8'))
+        print("localMD5SumCMD %s: localMD5SumCMDResult " %(cls.localMD5SumCMD %(tarFilePath))+ localMD5SumCMDResult.decode('utf-8'))
+
+    @classmethod
+    def remoteMD5Sum(cls, ip, tarFileName):
+        remoteMD5SumCMDResult = subprocess.Popen(cls.remoteMD5SumCMD %(ip, tarFileName), \
+            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
+        logging.info("remoteMD5SumCMD:%s remoteMD5SumCMDResult " %(cls.remoteMD5SumCMD %(tarFilePath))+ remoteMD5SumCMDResult.decode('utf-8'))
+        print("remoteMD5SumCMD: remoteMD5SumCMDResult " %(cls.remoteMD5SumCMD %(tarFilePath))+ remoteMD5SumCMDResult.decode('utf-8'))
+
+
+"""
+我们需要对tar数据压缩包进行传输
+"""
+
+class Transfer(object):
+    # 根据本地的tarFilePath发送到目标远程机器
+    transferCMD="scp -P 50022 %s op_admin@%s:%s"
+    @classmethod
+    def transferTar(cls, tarFilePath, ip, targetDataPath="/data/d1/migrate_in"):
+        transferCMDResult = subprocess.Popen(cls.transferCMD %(tarFilePath, ip, targetDataPath), \
+            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
+        logging.info("transferCMD:%s transferCMDResult " %(cls.transferCMD %(tarFilePath, ip, targetDataPath)) + transferCMDResult.decode('utf-8'))
 
 
 if __name__ == "__main__":
