@@ -22,4 +22,4 @@ This tool will insert select * from way, and select from source ck cluster unifo
 ## clickhouse_migrate_via_scp.py && clickhouse_migrate_multiple_thread.py
 These tools will use scp method to migrate data locally(from one node A to node A'), first it will compress the data under the data directory, then scp to corresponding
 node, then move these data to detached, then attach these data.
-
+You should use this tool as root.
