@@ -140,11 +140,13 @@ class Validator(object):
 
 
 if __name__ == "__main__":
-    validator = Validator();
+
     database = None
     tables = None
-    if (len(sys.argv) == 2):
-        database = sys.argv[1]
+    database = sys.argv[1]
+    source_ck_node_ip = sys.argv[2]
+    target_ck_node_ip = sys.argv[3]
+    validator = Validator(source_ck_node_ip, target_ck_node_ip);
     if(database != None):
         tables = validator.get_all_tables(database);
     else:
