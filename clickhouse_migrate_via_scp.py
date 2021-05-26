@@ -4,6 +4,9 @@ import subprocess
 import logging
 
 #项目以root用户执行
+#尝试多线程任务
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, FIRST_COMPLETED
+
 
 logging.basicConfig(filename="migrate_via_scp.log", filemode="w", level=logging.INFO)
 
@@ -234,7 +237,13 @@ class RemoteAttach(object):
         logging.info("rmTarCMD : rmTarCMDResult %s" %(cls.rmTarCMD %(ip, targetTarPath) + rmCMDResult.decode('utf-8')))
 
 
-
+def migrate_job(ip, database, table):
+    Compressor.compress(_database, _table)
+    _tarPath = migrateFromPath+"/"+_table+".tar.gz"
+    Transfer.transferTar(_tarPath, ip)
+    RemoteMove2Detached.move2Detached(ip, _database, _table)
+    RemoteExtract.chownAndExtract(ip, _database, _table)
+    RemoteAttach.attachAndRemove(ip, _database, _table)
 
 
 if __name__ == "__main__":
@@ -258,10 +267,5 @@ if __name__ == "__main__":
     for _database in d:
         _database = 'app'
         for _table in d[_database]:
-            Compressor.compress(_database, _table)
-            _tarPath = migrateFromPath+"/"+_table+".tar.gz"
-            Transfer.transferTar(_tarPath, ip)
-            RemoteMove2Detached.move2Detached(ip, _database, _table)
-            RemoteExtract.chownAndExtract(ip, _database, _table)
-            RemoteAttach.attachAndRemove(ip, _database, _table)
+            
         break
