@@ -338,7 +338,8 @@ def printAndLog(message):
 if __name__ == '__main__':
     printAndLog("Input database list, and target machien ips string, seperated by ',', concurrentWorks")
     databaseString = sys.argv[1]
-    remoteIpString = sys.argv[2]
+    sourceIpString = sys.argv[2]
+    remoteIpString = sys.argv[3]
     concurrentWorks = 6
     try:
         concurrentWorks = sys.argv[3]
@@ -347,7 +348,7 @@ if __name__ == '__main__':
         printAndLog("Use default concurrent :6")
         printAndLog (ex)
     #sourceIPString目前使用的是实时集群ip，已经写入函数声明默认值
-    RemoteIPConnectionCounter.initIPCountDict(remoteIpString)
+    RemoteIPConnectionCounter.initIPCountDict(remoteIpString,sourceIpString)
     databaseList = databaseString.rstrip(',').split(',')
     if (databaseList == None):
         printAndLog("No database input")
